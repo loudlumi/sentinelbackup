@@ -1,0 +1,1 @@
+replace(replace(replace(replace(string(outputs('Format_JSON_Output')), ',\"', ',\n\"'), '{\"', '{\n\"'), ']}', ']\n}'), '\":[', '\":[\n')
