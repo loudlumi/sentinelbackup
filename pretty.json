@@ -1,1 +1,4 @@
 replace(replace(replace(replace(string(outputs('Format_JSON_Output')), ',\"', ',\n\"'), '{\"', '{\n\"'), ']}', ']\n}'), '\":[', '\":[\n')
+
+
+  concat('https://api.githubifc.iad.ca.inet/tf-az-canada-workload-sec-siem/sentinelbackup/contents/log-sec-prd-cc-01-', formatDateTime(utcNow(), 'yy-MM-dd-HH:mm'), '.json')
