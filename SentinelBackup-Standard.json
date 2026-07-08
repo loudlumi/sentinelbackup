@@ -1,0 +1,125 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "Recurrence": {
+        "type": "Recurrence",
+        "recurrence": {
+          "frequency": "Month",
+          "interval": 1
+        }
+      }
+    },
+    "actions": {
+      "Get_Analytic_Rule": {
+        "runAfter": {},
+        "type": "Http",
+        "inputs": {
+          "uri": "https://management.azure.com/subscriptions/f96dc016-5a6b-4b65-ad3b-fe5344e28c3d/resourceGroups/rg-rd-hub-p/providers/Microsoft.OperationalInsights/workspaces/law-rd-hub-p01/providers/Microsoft.SecurityInsights/alertRules?api-version=2023-02-01",
+          "method": "GET",
+          "authentication": {
+            "type": "ManagedServiceIdentity",
+            "audience": "https://management.azure.com"
+          }
+        },
+        "runtimeConfiguration": {
+          "contentTransfer": {
+            "transferMode": "Chunked"
+          }
+        }
+      },
+      "Set_Rules_as_Variable": {
+        "runAfter": {
+          "Get_Analytic_Rule": [
+            "Succeeded"
+          ]
+        },
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "AnalyticRules",
+              "type": "object",
+              "value": "@body('Get_Analytic_Rule')"
+            }
+          ]
+        }
+      },
+      "GET_PAT_from_KeyVault": {
+        "runAfter": {
+          "Set_Rules_as_Variable": [
+            "Succeeded"
+          ]
+        },
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "keyvault"
+            }
+          },
+          "method": "get",
+          "path": "/secrets/@{encodeURIComponent('PATSentinel')}/value"
+        },
+        "runtimeConfiguration": {
+          "secureData": {
+            "properties": [
+              "outputs"
+            ]
+          }
+        }
+      },
+      "Format_JSON_Output": {
+        "runAfter": {
+          "GET_PAT_from_KeyVault": [
+            "Succeeded"
+          ]
+        },
+        "type": "Compose",
+        "inputs": "@json(string(body('Get_Analytic_Rule')))"
+      },
+      "Convert_to_Pretty_JSON": {
+        "runAfter": {
+          "Format_JSON_Output": [
+            "Succeeded"
+          ]
+        },
+        "type": "Compose",
+        "inputs": "@replace(replace(replace(replace(string(outputs('Format_JSON_Output')), ',\"', ',\n\"'), '{\"', '{\n\"'), ']}', ']\n}'), '\":[', '\":[\n')"
+      },
+      "Push_To_GIT": {
+        "runAfter": {
+          "Convert_to_Pretty_JSON": [
+            "Succeeded"
+          ]
+        },
+        "type": "Http",
+        "inputs": {
+          "uri": "@{concat('https://api.github.com/repos/lfc-it-sec/lfc-sentinel/contents/Sentinel-prod/log-sec-prd-cc-01-', formatDateTime(utcNow(), 'yy-MM-dd-HHmm'), '.json')}",
+          "method": "PUT",
+          "headers": {
+            "Accept": "application/vnd.github+json",
+            "Authorization": "Bearer @{body('GET_PAT_from_KeyVault')?['value']}",
+            "Content-Type": "application/json",
+            "X-GitHub-Api-Version": "2022-11-28"
+          },
+          "body": {
+            "branch": "main",
+            "content": "@{base64(outputs('Convert_to_Pretty_JSON'))}",
+            "message": "Updating analytical rules"
+          }
+        },
+        "runtimeConfiguration": {
+          "secureData": {
+            "properties": [
+              "inputs"
+            ]
+          }
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}
